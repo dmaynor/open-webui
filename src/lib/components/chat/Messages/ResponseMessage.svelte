@@ -51,6 +51,8 @@
 	import FollowUps from './ResponseMessage/FollowUps.svelte';
 	import { fade } from 'svelte/transition';
 	import { flyAndScale } from '$lib/utils/transitions';
+	import { isMultiAgentResponse, parseMultiAgentResponse } from '$lib/utils/multiAgent';
+	import MultiAgentResponse from './MultiAgentResponse.svelte';
 
 	interface MessageType {
 		id: string;
@@ -790,9 +792,48 @@
 								{#if message.content === '' && !message.error && (message?.statusHistory ?? [...(message?.status ? [message?.status] : [])]).length === 0}
 									<Skeleton />
 								{:else if message.content && message.error !== true}
-									<!-- always show message contents even if there's an error -->
-									<!-- unless message.error === true which is legacy error handling, where the error message is stored in message.content -->
-									<ContentRenderer
+									<!-- Check if this is a multi-agent response -->
+									{#if isMultiAgentResponse(message.content)}
+										<!-- Render multiple agent messages -->
+										{#each parseMultiAgentResponse(message.content) as agentMessage, agentIdx}
+											<div class="mb-3">
+												<MultiAgentResponse
+													{agentMessage}
+													messageId={message.id}
+													idx={agentIdx}
+													timestamp={message.timestamp}
+													{history}
+													onSave={({ raw, oldContent, newContent }) => {
+														history.messages[message.id].content = history.messages[
+															message.id
+														].content.replace(raw, raw.replace(oldContent, newContent));
+
+														updateChat();
+													}}
+													onSourceClick={async (id, idx) => {
+														console.log(id, idx);
+													}}
+													onTaskClick={async (e) => {
+														console.log(e);
+													}}
+													onAddMessages={async (messages) => {
+														let _messages = [];
+														for (const message of messages) {
+															if (typeof message.content === 'string') {
+																_messages.push({
+																	model: model?.id ?? message.model,
+																	...message
+																});
+															}
+														}
+														addMessages(_messages);
+													}}
+												/>
+											</div>
+										{/each}
+									{:else}
+										<!-- Regular single response -->
+										<ContentRenderer
 										id={message.id}
 										{history}
 										content={message.content}
@@ -842,6 +883,7 @@
 											updateChat();
 										}}
 									/>
+									{/if}
 								{/if}
 
 								{#if message?.error}
